@@ -35,6 +35,7 @@ export function NuevoPedido({ proveedores, onGuardar, onCancelar, buscarDuplicad
   const [duplicados, setDuplicados] = useState<Array<{ producto: Producto; pedidoOrigen: Pedido }>>([])
   const [faltantesEncontrados, setFaltantesEncontrados] = useState<ProductoFaltante[]>([])
   const [error, setError] = useState("")
+  const [guardando, setGuardando] = useState(false)
 
   const parsearProductos = (texto: string): Producto[] => {
     const lineas = texto
@@ -110,7 +111,9 @@ export function NuevoPedido({ proveedores, onGuardar, onCancelar, buscarDuplicad
     return fecha.toLocaleDateString("es-AR")
   }
 
-  const guardarPedido = () => {
+  const guardarPedido = async () => {
+    if (guardando) return // Prevenir múltiples clicks
+
     if (!proveedorSeleccionado) {
       setError("Debe seleccionar un proveedor")
       return
@@ -121,17 +124,23 @@ export function NuevoPedido({ proveedores, onGuardar, onCancelar, buscarDuplicad
       return
     }
 
-    const nombreProveedor =
-      proveedorSeleccionado === "europa" ? `${subProveedorSeleccionado} (Europa)` : proveedorSeleccionado
+    setGuardando(true)
 
-    onGuardar({
-      proveedor: nombreProveedor,
-      fecha: fechaPedido,
-      fecha_pedido: fechaPedido,
-      dias_estimados: diasEstimados,
-      productos,
-      estado: "transito",
-    })
+    try {
+      const nombreProveedor =
+        proveedorSeleccionado === "europa" ? `${subProveedorSeleccionado} (Europa)` : proveedorSeleccionado
+
+      await onGuardar({
+        proveedor: nombreProveedor,
+        fecha: fechaPedido,
+        fecha_pedido: fechaPedido,
+        dias_estimados: diasEstimados,
+        productos,
+        estado: "transito",
+      })
+    } finally {
+      setGuardando(false)
+    }
   }
 
   const todosLosProveedores = [
@@ -142,7 +151,7 @@ export function NuevoPedido({ proveedores, onGuardar, onCancelar, buscarDuplicad
   return (
     <div className="container mx-auto p-6 max-w-4xl">
       <div className="flex items-center gap-4 mb-6">
-        <Button variant="ghost" onClick={onCancelar} className="gap-2">
+        <Button variant="ghost" onClick={onCancelar} className="gap-2" disabled={guardando}>
           <ArrowLeft className="w-4 h-4" />
           Volver
         </Button>
@@ -171,6 +180,7 @@ export function NuevoPedido({ proveedores, onGuardar, onCancelar, buscarDuplicad
                     value={fechaPedido}
                     onChange={(e) => setFechaPedido(e.target.value)}
                     className="pl-10"
+                    disabled={guardando}
                   />
                 </div>
               </div>
@@ -186,6 +196,7 @@ export function NuevoPedido({ proveedores, onGuardar, onCancelar, buscarDuplicad
                     value={diasEstimados || ""}
                     onChange={(e) => setDiasEstimados(e.target.value ? Number.parseInt(e.target.value) : undefined)}
                     className="pl-10"
+                    disabled={guardando}
                   />
                 </div>
                 {diasEstimados && (
@@ -205,6 +216,7 @@ export function NuevoPedido({ proveedores, onGuardar, onCancelar, buscarDuplicad
                     setSubProveedorSeleccionado(value)
                   }
                 }}
+                disabled={guardando}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Seleccionar proveedor" />
@@ -245,10 +257,11 @@ export function NuevoPedido({ proveedores, onGuardar, onCancelar, buscarDuplicad
                 value={textoPedido}
                 onChange={(e) => setTextoPedido(e.target.value)}
                 className="min-h-[200px] font-mono text-sm"
+                disabled={guardando}
               />
             </div>
 
-            <Button onClick={procesarPedido} disabled={!textoPedido.trim()}>
+            <Button onClick={procesarPedido} disabled={!textoPedido.trim() || guardando}>
               Procesar Productos
             </Button>
 
@@ -320,10 +333,12 @@ export function NuevoPedido({ proveedores, onGuardar, onCancelar, buscarDuplicad
         {/* Botones de Acción */}
         {productos.length > 0 && (
           <div className="flex gap-4 justify-end">
-            <Button variant="outline" onClick={onCancelar}>
+            <Button variant="outline" onClick={onCancelar} disabled={guardando}>
               Cancelar
             </Button>
-            <Button onClick={guardarPedido}>Guardar Pedido</Button>
+            <Button onClick={guardarPedido} disabled={guardando}>
+              {guardando ? "Guardando..." : "Guardar Pedido"}
+            </Button>
           </div>
         )}
       </div>

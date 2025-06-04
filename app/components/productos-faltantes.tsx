@@ -10,6 +10,17 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { useToast } from "@/hooks/use-toast"
 import { supabase } from "@/lib/supabase"
 import type { ProductoFaltante } from "../page"
@@ -78,6 +89,32 @@ export function ProductosFaltantes({ faltantes, proveedores, onVolver, onActuali
       toast({
         title: "❌ Error",
         description: "No se pudieron copiar los faltantes",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const eliminarTodosFaltantesProveedor = async (proveedor: string) => {
+    try {
+      const { error } = await supabase
+        .from("productos_faltantes")
+        .delete()
+        .eq("proveedor", proveedor)
+        .eq("resuelto", false)
+
+      if (error) throw error
+
+      toast({
+        title: "🗑️ Eliminados",
+        description: `Todos los faltantes de ${proveedor} han sido eliminados`,
+      })
+
+      onActualizar()
+    } catch (error) {
+      console.error("Error eliminando faltantes del proveedor:", error)
+      toast({
+        title: "❌ Error",
+        description: "No se pudieron eliminar los faltantes del proveedor",
         variant: "destructive",
       })
     }
@@ -271,6 +308,32 @@ export function ProductosFaltantes({ faltantes, proveedores, onVolver, onActuali
             <Copy className="w-4 h-4" />
             Copiar Faltantes
           </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive" className="gap-2">
+                <Trash2 className="w-4 h-4" />
+                Eliminar Todos
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>¿Eliminar todos los faltantes?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Se eliminarán todos los productos faltantes de {proveedorSeleccionado}. Esta acción no se puede
+                  deshacer.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => eliminarTodosFaltantesProveedor(proveedorSeleccionado)}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Eliminar Todos
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
 
         <div className="space-y-4">

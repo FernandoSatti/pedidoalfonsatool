@@ -350,6 +350,10 @@ export default function PedidosManager() {
         onVolver={() => setPedidoSeleccionado(null)}
         onCambiarEstado={cambiarEstadoPedido}
         onEliminar={eliminarPedido}
+        onActualizar={() => {
+          cargarPedidos()
+          cargarFaltantes()
+        }}
       />
     )
   }
@@ -390,7 +394,7 @@ export default function PedidosManager() {
         <div className="flex gap-2">
           <Button
             variant="outline"
-            onClick={() => window.open("https://alfonsa-tools-modern.vercel.app/", "_blank")}
+            onClick={() => (window.location.href = "https://alfonsa-tools-modern.vercel.app/")}
             className="gap-2"
           >
             <Home className="w-4 h-4" />
