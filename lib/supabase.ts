@@ -13,6 +13,9 @@ export type Database = {
           id: string
           proveedor: string
           fecha: string
+          fecha_pedido: string
+          fecha_estimada_llegada: string | null
+          dias_estimados: number | null
           estado: "transito" | "completado"
           created_at: string
           updated_at: string
@@ -21,6 +24,9 @@ export type Database = {
           id?: string
           proveedor: string
           fecha?: string
+          fecha_pedido?: string
+          fecha_estimada_llegada?: string | null
+          dias_estimados?: number | null
           estado?: "transito" | "completado"
           created_at?: string
           updated_at?: string
@@ -29,6 +35,9 @@ export type Database = {
           id?: string
           proveedor?: string
           fecha?: string
+          fecha_pedido?: string
+          fecha_estimada_llegada?: string | null
+          dias_estimados?: number | null
           estado?: "transito" | "completado"
           created_at?: string
           updated_at?: string
@@ -67,6 +76,44 @@ export type Database = {
           precio2?: number
           linea_original?: string
           created_at?: string
+        }
+      }
+      productos_faltantes: {
+        Row: {
+          id: string
+          nombre: string
+          cantidad: number
+          unidades: number
+          proveedor: string
+          fecha_registro: string
+          precio: number | null
+          resuelto: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          nombre: string
+          cantidad: number
+          unidades: number
+          proveedor: string
+          fecha_registro?: string
+          precio?: number | null
+          resuelto?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          nombre?: string
+          cantidad?: number
+          unidades?: number
+          proveedor?: string
+          fecha_registro?: string
+          precio?: number | null
+          resuelto?: boolean
+          created_at?: string
+          updated_at?: string
         }
       }
     }

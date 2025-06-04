@@ -1,6 +1,7 @@
 "use client"
 
-import { ArrowLeft, Clock, CheckCircle, Trash2 } from "lucide-react"
+import { useState, useEffect } from "react"
+import { ArrowLeft, Clock, CheckCircle, Trash2, Calendar } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -26,11 +27,30 @@ interface DetallePedidoProps {
 }
 
 export function DetallePedido({ pedido, onVolver, onCambiarEstado, onEliminar }: DetallePedidoProps) {
+  const [animando, setAnimando] = useState<"completado" | "transito" | null>(null)
+  const [estadoLocal, setEstadoLocal] = useState(pedido.estado)
+
+  // Actualizar estado local cuando cambie el pedido
+  useEffect(() => {
+    setEstadoLocal(pedido.estado)
+  }, [pedido.estado])
+
   const calcularTotal = () => {
     return pedido.productos.reduce((total, producto) => {
       const unidadesReales = producto.cantidad * producto.unidades
       return total + producto.precio2 * unidadesReales
     }, 0)
+  }
+
+  const handleCambiarEstado = (estado: "transito" | "completado") => {
+    setAnimando(estado)
+    setEstadoLocal(estado) // Cambiar inmediatamente el estado local
+
+    // Llamar a la función después de un breve retraso para la animación
+    setTimeout(() => {
+      onCambiarEstado(pedido.id, estado)
+      setAnimando(null)
+    }, 600)
   }
 
   return (
@@ -42,13 +62,13 @@ export function DetallePedido({ pedido, onVolver, onCambiarEstado, onEliminar }:
         </Button>
         <div className="flex-1">
           <h1 className="text-2xl font-bold">{pedido.proveedor}</h1>
-          <p className="text-muted-foreground">Pedido del {pedido.fecha}</p>
+          <p className="text-muted-foreground">Pedido del {pedido.fecha_pedido}</p>
         </div>
         <Badge
           variant="secondary"
-          className={pedido.estado === "transito" ? "bg-orange-100 text-orange-800" : "bg-green-100 text-green-800"}
+          className={estadoLocal === "transito" ? "bg-orange-100 text-orange-800" : "bg-green-100 text-green-800"}
         >
-          {pedido.estado === "transito" ? "En Tránsito" : "Completado"}
+          {estadoLocal === "transito" ? "En Tránsito" : "Completado"}
         </Badge>
       </div>
 
@@ -59,21 +79,47 @@ export function DetallePedido({ pedido, onVolver, onCambiarEstado, onEliminar }:
             <div className="flex justify-between items-start">
               <div>
                 <CardTitle>Información del Pedido</CardTitle>
-                <CardDescription>
-                  {pedido.productos.length} productos • Total estimado: $
-                  {calcularTotal().toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+                <CardDescription className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-4 h-4" />
+                    Fecha de pedido: {pedido.fecha_pedido}
+                  </div>
+                  {pedido.fecha_estimada_llegada && (
+                    <div className="flex items-center gap-2 text-blue-600">
+                      <Clock className="w-4 h-4" />
+                      Llegada estimada: {pedido.fecha_estimada_llegada}
+                      {pedido.dias_estimados && ` (${pedido.dias_estimados} días)`}
+                    </div>
+                  )}
+                  <div>
+                    {pedido.productos.length} productos • Total estimado: $
+                    {calcularTotal().toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+                  </div>
                 </CardDescription>
               </div>
               <div className="flex gap-2">
-                {pedido.estado === "transito" ? (
-                  <Button onClick={() => onCambiarEstado(pedido.id, "completado")} className="gap-2">
-                    <CheckCircle className="w-4 h-4" />
-                    Marcar Completado
+                {estadoLocal === "transito" ? (
+                  <Button
+                    onClick={() => handleCambiarEstado("completado")}
+                    className={`gap-2 transition-all duration-500 ${
+                      animando === "completado" ? "bg-green-500 scale-105" : ""
+                    }`}
+                    disabled={animando !== null}
+                  >
+                    <CheckCircle className={`w-4 h-4 ${animando === "completado" ? "animate-ping" : ""}`} />
+                    {animando === "completado" ? "¡Completado!" : "Marcar Completado"}
                   </Button>
                 ) : (
-                  <Button variant="outline" onClick={() => onCambiarEstado(pedido.id, "transito")} className="gap-2">
-                    <Clock className="w-4 h-4" />
-                    Marcar En Tránsito
+                  <Button
+                    variant="outline"
+                    onClick={() => handleCambiarEstado("transito")}
+                    className={`gap-2 transition-all duration-500 ${
+                      animando === "transito" ? "bg-orange-500 text-white scale-105" : ""
+                    }`}
+                    disabled={animando !== null}
+                  >
+                    <Clock className={`w-4 h-4 ${animando === "transito" ? "animate-spin" : ""}`} />
+                    {animando === "transito" ? "¡En Tránsito!" : "Marcar En Tránsito"}
                   </Button>
                 )}
 

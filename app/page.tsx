@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Plus, Package, Clock, CheckCircle, RefreshCw } from "lucide-react"
+import { Plus, Package, Clock, CheckCircle, RefreshCw, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/hooks/use-toast"
 import { NuevoPedido } from "./components/nuevo-pedido"
 import { DetallePedido } from "./components/detalle-pedido"
+import { ProductosFaltantes } from "./components/productos-faltantes"
 import { supabase } from "@/lib/supabase"
 
 export interface Producto {
@@ -25,10 +26,24 @@ export interface Pedido {
   id: string
   proveedor: string
   fecha: string
+  fecha_pedido: string
+  fecha_estimada_llegada?: string | null
+  dias_estimados?: number | null
   productos: Producto[]
   estado: "transito" | "completado"
   created_at?: string
   updated_at?: string
+}
+
+export interface ProductoFaltante {
+  id: string
+  nombre: string
+  cantidad: number
+  unidades: number
+  proveedor: string
+  fecha_registro: string
+  precio: number | null
+  resuelto: boolean
 }
 
 const PROVEEDORES = {
@@ -65,7 +80,9 @@ const PROVEEDORES = {
 
 export default function PedidosManager() {
   const [pedidos, setPedidos] = useState<Pedido[]>([])
+  const [faltantes, setFaltantes] = useState<ProductoFaltante[]>([])
   const [mostrarNuevoPedido, setMostrarNuevoPedido] = useState(false)
+  const [mostrarFaltantes, setMostrarFaltantes] = useState(false)
   const [pedidoSeleccionado, setPedidoSeleccionado] = useState<Pedido | null>(null)
   const [cargando, setCargando] = useState(true)
   const { toast } = useToast()
@@ -92,6 +109,11 @@ export default function PedidosManager() {
           id: pedido.id,
           proveedor: pedido.proveedor,
           fecha: new Date(pedido.fecha).toLocaleDateString("es-AR"),
+          fecha_pedido: new Date(pedido.fecha_pedido).toLocaleDateString("es-AR"),
+          fecha_estimada_llegada: pedido.fecha_estimada_llegada
+            ? new Date(pedido.fecha_estimada_llegada).toLocaleDateString("es-AR")
+            : null,
+          dias_estimados: pedido.dias_estimados,
           estado: pedido.estado as "transito" | "completado",
           productos: pedido.productos || [],
           created_at: pedido.created_at,
@@ -111,23 +133,64 @@ export default function PedidosManager() {
     }
   }
 
+  // Cargar productos faltantes
+  const cargarFaltantes = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("productos_faltantes")
+        .select("*")
+        .eq("resuelto", false)
+        .order("fecha_registro", { ascending: false })
+
+      if (error) throw error
+
+      const faltantesFormateados: ProductoFaltante[] =
+        data?.map((faltante) => ({
+          ...faltante,
+          fecha_registro: new Date(faltante.fecha_registro).toLocaleDateString("es-AR"),
+        })) || []
+
+      setFaltantes(faltantesFormateados)
+    } catch (error) {
+      console.error("Error cargando faltantes:", error)
+    }
+  }
+
   useEffect(() => {
     cargarPedidos()
+    cargarFaltantes()
   }, [])
 
-  const agregarPedido = async (nuevoPedido: Omit<Pedido, "id" | "fecha" | "created_at" | "updated_at">) => {
+  const agregarPedido = async (nuevoPedido: Omit<Pedido, "id" | "created_at" | "updated_at">) => {
     try {
+      // Calcular fecha estimada de llegada si se proporcionaron días
+      let fechaEstimadaLlegada = null
+      if (nuevoPedido.dias_estimados) {
+        const fechaPedido = new Date(nuevoPedido.fecha_pedido)
+        fechaEstimadaLlegada = new Date(fechaPedido.getTime() + nuevoPedido.dias_estimados * 24 * 60 * 60 * 1000)
+          .toISOString()
+          .split("T")[0]
+      }
+
       // Insertar el pedido
       const { data: pedidoData, error: pedidoError } = await supabase
         .from("pedidos")
         .insert({
           proveedor: nuevoPedido.proveedor,
+          fecha_pedido: nuevoPedido.fecha_pedido,
+          fecha_estimada_llegada: fechaEstimadaLlegada,
+          dias_estimados: nuevoPedido.dias_estimados,
           estado: nuevoPedido.estado,
         })
         .select()
         .single()
 
       if (pedidoError) throw pedidoError
+
+      // Verificar y descontar productos faltantes
+      for (const producto of nuevoPedido.productos) {
+        await verificarYDescontarFaltantes(producto)
+      }
 
       // Insertar los productos
       const productosParaInsertar = nuevoPedido.productos.map((producto) => ({
@@ -145,19 +208,69 @@ export default function PedidosManager() {
       if (productosError) throw productosError
 
       toast({
-        title: "Éxito",
+        title: "✅ Éxito",
         description: "Pedido guardado correctamente",
       })
 
       setMostrarNuevoPedido(false)
-      cargarPedidos() // Recargar la lista
+      cargarPedidos()
+      cargarFaltantes()
     } catch (error) {
       console.error("Error guardando pedido:", error)
       toast({
-        title: "Error",
+        title: "❌ Error",
         description: "No se pudo guardar el pedido",
         variant: "destructive",
       })
+    }
+  }
+
+  const verificarYDescontarFaltantes = async (producto: Producto) => {
+    try {
+      // Buscar productos faltantes con el mismo nombre
+      const { data: faltantesData, error } = await supabase
+        .from("productos_faltantes")
+        .select("*")
+        .eq("nombre", producto.nombre)
+        .eq("resuelto", false)
+        .order("fecha_registro", { ascending: true })
+
+      if (error) throw error
+
+      let cantidadRestante = producto.cantidad * producto.unidades
+
+      for (const faltante of faltantesData || []) {
+        if (cantidadRestante <= 0) break
+
+        const cantidadFaltante = faltante.cantidad * faltante.unidades
+
+        if (cantidadRestante >= cantidadFaltante) {
+          // Marcar como resuelto completamente
+          await supabase.from("productos_faltantes").update({ resuelto: true }).eq("id", faltante.id)
+
+          cantidadRestante -= cantidadFaltante
+
+          toast({
+            title: "🎉 Faltante resuelto",
+            description: `Se resolvió: ${faltante.cantidad}x${faltante.unidades} ${faltante.nombre}`,
+          })
+        } else {
+          // Reducir la cantidad del faltante
+          const nuevaCantidadTotal = cantidadFaltante - cantidadRestante
+          const nuevaCantidad = Math.ceil(nuevaCantidadTotal / faltante.unidades)
+
+          await supabase.from("productos_faltantes").update({ cantidad: nuevaCantidad }).eq("id", faltante.id)
+
+          cantidadRestante = 0
+
+          toast({
+            title: "📉 Faltante reducido",
+            description: `Se redujo el faltante de ${faltante.nombre}`,
+          })
+        }
+      }
+    } catch (error) {
+      console.error("Error verificando faltantes:", error)
     }
   }
 
@@ -167,16 +280,17 @@ export default function PedidosManager() {
 
       if (error) throw error
 
+      // Animación de éxito
       toast({
-        title: "Éxito",
+        title: "🎉 Estado actualizado",
         description: `Pedido marcado como ${nuevoEstado === "transito" ? "en tránsito" : "completado"}`,
       })
 
-      cargarPedidos() // Recargar la lista
+      cargarPedidos()
     } catch (error) {
       console.error("Error actualizando estado:", error)
       toast({
-        title: "Error",
+        title: "❌ Error",
         description: "No se pudo actualizar el estado del pedido",
         variant: "destructive",
       })
@@ -190,16 +304,16 @@ export default function PedidosManager() {
       if (error) throw error
 
       toast({
-        title: "Éxito",
+        title: "🗑️ Pedido eliminado",
         description: "Pedido eliminado correctamente",
       })
 
       setPedidoSeleccionado(null)
-      cargarPedidos() // Recargar la lista
+      cargarPedidos()
     } catch (error) {
       console.error("Error eliminando pedido:", error)
       toast({
-        title: "Error",
+        title: "❌ Error",
         description: "No se pudo eliminar el pedido",
         variant: "destructive",
       })
@@ -246,6 +360,21 @@ export default function PedidosManager() {
         onGuardar={agregarPedido}
         onCancelar={() => setMostrarNuevoPedido(false)}
         buscarDuplicados={buscarProductosDuplicados}
+        faltantes={faltantes}
+      />
+    )
+  }
+
+  if (mostrarFaltantes) {
+    return (
+      <ProductosFaltantes
+        faltantes={faltantes}
+        proveedores={PROVEEDORES}
+        onVolver={() => setMostrarFaltantes(false)}
+        onActualizar={() => {
+          cargarFaltantes()
+          cargarPedidos()
+        }}
       />
     )
   }
@@ -262,6 +391,10 @@ export default function PedidosManager() {
             <RefreshCw className={`w-4 h-4 ${cargando ? "animate-spin" : ""}`} />
             Actualizar
           </Button>
+          <Button variant="outline" onClick={() => setMostrarFaltantes(true)} className="gap-2">
+            <AlertTriangle className="w-4 h-4" />
+            Faltantes ({faltantes.length})
+          </Button>
           <Button onClick={() => setMostrarNuevoPedido(true)} className="gap-2">
             <Plus className="w-4 h-4" />
             Nuevo Pedido
@@ -270,7 +403,7 @@ export default function PedidosManager() {
       </div>
 
       {/* Estadísticas */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Pedidos</CardTitle>
@@ -298,6 +431,16 @@ export default function PedidosManager() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-500">{pedidosCompletados.length}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Productos Faltantes</CardTitle>
+            <AlertTriangle className="h-4 w-4 text-red-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-500">{faltantes.length}</div>
           </CardContent>
         </Card>
       </div>
@@ -338,7 +481,12 @@ export default function PedidosManager() {
                       <div>
                         <CardTitle className="text-lg">{pedido.proveedor}</CardTitle>
                         <CardDescription>
-                          Fecha: {pedido.fecha} • {pedido.productos.length} productos
+                          Pedido: {pedido.fecha_pedido} • {pedido.productos.length} productos
+                          {pedido.fecha_estimada_llegada && (
+                            <span className="block text-blue-600">
+                              Llegada estimada: {pedido.fecha_estimada_llegada}
+                            </span>
+                          )}
                         </CardDescription>
                       </div>
                       <Badge variant="secondary" className="bg-orange-100 text-orange-800">
@@ -367,7 +515,7 @@ export default function PedidosManager() {
                       <div>
                         <CardTitle className="text-lg">{pedido.proveedor}</CardTitle>
                         <CardDescription>
-                          Fecha: {pedido.fecha} • {pedido.productos.length} productos
+                          Pedido: {pedido.fecha_pedido} • {pedido.productos.length} productos
                         </CardDescription>
                       </div>
                       <Badge variant="secondary" className="bg-green-100 text-green-800">

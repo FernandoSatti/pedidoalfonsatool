@@ -1,14 +1,15 @@
 "use client"
 
 import { useState } from "react"
-import { ArrowLeft, AlertTriangle } from "lucide-react"
+import { ArrowLeft, AlertTriangle, Calendar, Clock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import type { Pedido, Producto } from "../page"
+import type { Pedido, Producto, ProductoFaltante } from "../page"
 
 interface NuevoPedidoProps {
   proveedores: {
@@ -18,17 +19,21 @@ interface NuevoPedidoProps {
     }
     independientes: string[]
   }
-  onGuardar: (pedido: Omit<Pedido, "id" | "fecha" | "created_at" | "updated_at">) => void
+  onGuardar: (pedido: Omit<Pedido, "id" | "created_at" | "updated_at">) => void
   onCancelar: () => void
   buscarDuplicados: (productos: Producto[]) => Array<{ producto: Producto; pedidoOrigen: Pedido }>
+  faltantes: ProductoFaltante[]
 }
 
-export function NuevoPedido({ proveedores, onGuardar, onCancelar, buscarDuplicados }: NuevoPedidoProps) {
+export function NuevoPedido({ proveedores, onGuardar, onCancelar, buscarDuplicados, faltantes }: NuevoPedidoProps) {
   const [proveedorSeleccionado, setProveedorSeleccionado] = useState("")
   const [subProveedorSeleccionado, setSubProveedorSeleccionado] = useState("")
+  const [fechaPedido, setFechaPedido] = useState(new Date().toISOString().split("T")[0])
+  const [diasEstimados, setDiasEstimados] = useState<number | undefined>(undefined)
   const [textoPedido, setTextoPedido] = useState("")
   const [productos, setProductos] = useState<Producto[]>([])
   const [duplicados, setDuplicados] = useState<Array<{ producto: Producto; pedidoOrigen: Pedido }>>([])
+  const [faltantesEncontrados, setFaltantesEncontrados] = useState<ProductoFaltante[]>([])
   const [error, setError] = useState("")
 
   const parsearProductos = (texto: string): Producto[] => {
@@ -58,6 +63,20 @@ export function NuevoPedido({ proveedores, onGuardar, onCancelar, buscarDuplicad
     return productosParseados
   }
 
+  const buscarFaltantesCoincidentes = (productos: Producto[]) => {
+    const coincidencias: ProductoFaltante[] = []
+
+    productos.forEach((producto) => {
+      faltantes.forEach((faltante) => {
+        if (faltante.nombre.toLowerCase() === producto.nombre.toLowerCase()) {
+          coincidencias.push(faltante)
+        }
+      })
+    })
+
+    return coincidencias
+  }
+
   const procesarPedido = () => {
     if (!textoPedido.trim()) {
       setError("Debe ingresar los productos del pedido")
@@ -77,7 +96,18 @@ export function NuevoPedido({ proveedores, onGuardar, onCancelar, buscarDuplicad
     const duplicadosEncontrados = buscarDuplicados(productosParseados)
     setDuplicados(duplicadosEncontrados)
 
+    // Buscar faltantes que coincidan
+    const faltantesCoincidentes = buscarFaltantesCoincidentes(productosParseados)
+    setFaltantesEncontrados(faltantesCoincidentes)
+
     setError("")
+  }
+
+  const calcularFechaEstimada = () => {
+    if (!diasEstimados) return null
+    const fecha = new Date(fechaPedido)
+    fecha.setDate(fecha.getDate() + diasEstimados)
+    return fecha.toLocaleDateString("es-AR")
   }
 
   const guardarPedido = () => {
@@ -96,6 +126,9 @@ export function NuevoPedido({ proveedores, onGuardar, onCancelar, buscarDuplicad
 
     onGuardar({
       proveedor: nombreProveedor,
+      fecha: fechaPedido,
+      fecha_pedido: fechaPedido,
+      dias_estimados: diasEstimados,
       productos,
       estado: "transito",
     })
@@ -120,42 +153,78 @@ export function NuevoPedido({ proveedores, onGuardar, onCancelar, buscarDuplicad
       </div>
 
       <div className="grid gap-6">
-        {/* Selección de Proveedor */}
+        {/* Información del Pedido */}
         <Card>
           <CardHeader>
-            <CardTitle>Proveedor</CardTitle>
-            <CardDescription>Seleccione el proveedor para este pedido</CardDescription>
+            <CardTitle>Información del Pedido</CardTitle>
+            <CardDescription>Configure las fechas y proveedor del pedido</CardDescription>
           </CardHeader>
-          <CardContent>
-            <Select
-              value={proveedorSeleccionado}
-              onValueChange={(value) => {
-                setProveedorSeleccionado(value)
-                // Si es Europa, también guardamos el sub-proveedor
-                const proveedor = todosLosProveedores.find((p) => p.value === value)
-                if (proveedor?.grupo === "europa") {
-                  setSubProveedorSeleccionado(value)
-                }
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Seleccionar proveedor" />
-              </SelectTrigger>
-              <SelectContent>
-                <div className="font-semibold px-2 py-1 text-sm text-muted-foreground">Europa</div>
-                {proveedores.europa.subProveedores.map((proveedor) => (
-                  <SelectItem key={proveedor} value={proveedor}>
-                    {proveedor} (Europa)
-                  </SelectItem>
-                ))}
-                <div className="font-semibold px-2 py-1 text-sm text-muted-foreground mt-2">Independientes</div>
-                {proveedores.independientes.map((proveedor) => (
-                  <SelectItem key={proveedor} value={proveedor}>
-                    {proveedor}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="fecha-pedido">Fecha del Pedido</Label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="fecha-pedido"
+                    type="date"
+                    value={fechaPedido}
+                    onChange={(e) => setFechaPedido(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="dias-estimados">Días estimados de llegada (opcional)</Label>
+                <div className="relative">
+                  <Clock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="dias-estimados"
+                    type="number"
+                    placeholder="Ej: 15"
+                    value={diasEstimados || ""}
+                    onChange={(e) => setDiasEstimados(e.target.value ? Number.parseInt(e.target.value) : undefined)}
+                    className="pl-10"
+                  />
+                </div>
+                {diasEstimados && (
+                  <p className="text-sm text-muted-foreground mt-1">Llegada estimada: {calcularFechaEstimada()}</p>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="proveedor">Proveedor</Label>
+              <Select
+                value={proveedorSeleccionado}
+                onValueChange={(value) => {
+                  setProveedorSeleccionado(value)
+                  const proveedor = todosLosProveedores.find((p) => p.value === value)
+                  if (proveedor?.grupo === "europa") {
+                    setSubProveedorSeleccionado(value)
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccionar proveedor" />
+                </SelectTrigger>
+                <SelectContent>
+                  <div className="font-semibold px-2 py-1 text-sm text-muted-foreground">Europa</div>
+                  {proveedores.europa.subProveedores.map((proveedor) => (
+                    <SelectItem key={proveedor} value={proveedor}>
+                      {proveedor} (Europa)
+                    </SelectItem>
+                  ))}
+                  <div className="font-semibold px-2 py-1 text-sm text-muted-foreground mt-2">Independientes</div>
+                  {proveedores.independientes.map((proveedor) => (
+                    <SelectItem key={proveedor} value={proveedor}>
+                      {proveedor}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </CardContent>
         </Card>
 
@@ -227,6 +296,21 @@ export function NuevoPedido({ proveedores, onGuardar, onCancelar, buscarDuplicad
                   {dup.producto.cantidad}x{dup.producto.unidades} {dup.producto.nombre} ${dup.producto.precio1}/$
                   {dup.producto.precio2}
                   <span className="text-sm"> (pedido en {dup.pedidoOrigen.proveedor})</span>
+                </div>
+              ))}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Faltantes que se resolverán */}
+        {faltantesEncontrados.length > 0 && (
+          <Alert>
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              <div className="font-semibold mb-2">🎉 ESTE PEDIDO RESOLVERÁ PRODUCTOS FALTANTES:</div>
+              {faltantesEncontrados.map((faltante, index) => (
+                <div key={index} className="mb-1 text-green-700">
+                  {faltante.cantidad}x{faltante.unidades} {faltante.nombre} (registrado el {faltante.fecha_registro})
                 </div>
               ))}
             </AlertDescription>
