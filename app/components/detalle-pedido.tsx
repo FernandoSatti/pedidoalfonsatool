@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { ArrowLeft, Clock, CheckCircle, Trash2, Calendar } from "lucide-react"
+import { ArrowLeft, Clock, CheckCircle, Trash2, Calendar, Copy } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -17,6 +17,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import { useToast } from "@/hooks/use-toast"
 import type { Pedido } from "../page"
 
 interface DetallePedidoProps {
@@ -29,6 +30,7 @@ interface DetallePedidoProps {
 export function DetallePedido({ pedido, onVolver, onCambiarEstado, onEliminar }: DetallePedidoProps) {
   const [animando, setAnimando] = useState<"completado" | "transito" | null>(null)
   const [estadoLocal, setEstadoLocal] = useState(pedido.estado)
+  const { toast } = useToast()
 
   // Actualizar estado local cuando cambie el pedido
   useEffect(() => {
@@ -53,6 +55,23 @@ export function DetallePedido({ pedido, onVolver, onCambiarEstado, onEliminar }:
     }, 600)
   }
 
+  const copiarPedido = async () => {
+    try {
+      const textoPedido = pedido.productos.map((p) => p.linea_original).join("\n")
+      await navigator.clipboard.writeText(textoPedido)
+      toast({
+        title: "📋 Copiado",
+        description: "Pedido copiado al portapapeles",
+      })
+    } catch (error) {
+      toast({
+        title: "❌ Error",
+        description: "No se pudo copiar el pedido",
+        variant: "destructive",
+      })
+    }
+  }
+
   return (
     <div className="container mx-auto p-6 max-w-4xl">
       <div className="flex items-center gap-4 mb-6">
@@ -64,6 +83,10 @@ export function DetallePedido({ pedido, onVolver, onCambiarEstado, onEliminar }:
           <h1 className="text-2xl font-bold">{pedido.proveedor}</h1>
           <p className="text-muted-foreground">Pedido del {pedido.fecha_pedido}</p>
         </div>
+        <Button variant="outline" onClick={copiarPedido} className="gap-2">
+          <Copy className="w-4 h-4" />
+          Copiar Pedido
+        </Button>
         <Badge
           variant="secondary"
           className={estadoLocal === "transito" ? "bg-orange-100 text-orange-800" : "bg-green-100 text-green-800"}

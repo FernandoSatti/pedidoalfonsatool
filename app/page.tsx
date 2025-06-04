@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Plus, Package, Clock, CheckCircle, RefreshCw, AlertTriangle } from "lucide-react"
+import { Plus, Package, Clock, CheckCircle, RefreshCw, AlertTriangle, Home } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -61,6 +61,7 @@ const PROVEEDORES = {
       "Mani King",
       "Millan",
       "Norton",
+      "Pascual Toso",
       "Pernord Ricard",
       "Salentein",
       "Zuccardi",
@@ -387,6 +388,14 @@ export default function PedidosManager() {
           <p className="text-muted-foreground mt-2">Administra tus pedidos desde cualquier dispositivo</p>
         </div>
         <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => window.open("https://alfonsa-tools-modern.vercel.app/", "_blank")}
+            className="gap-2"
+          >
+            <Home className="w-4 h-4" />
+            Volver al Inicio
+          </Button>
           <Button variant="outline" onClick={cargarPedidos} disabled={cargando} className="gap-2">
             <RefreshCw className={`w-4 h-4 ${cargando ? "animate-spin" : ""}`} />
             Actualizar

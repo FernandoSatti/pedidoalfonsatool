@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { ArrowLeft, Plus, Trash2, AlertTriangle, ChevronRight, Package } from "lucide-react"
+import { ArrowLeft, Plus, Trash2, AlertTriangle, ChevronRight, Package, Copy } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -61,6 +61,27 @@ export function ProductosFaltantes({ faltantes, proveedores, onVolver, onActuali
     },
     {} as Record<string, ProductoFaltante[]>,
   )
+
+  const copiarFaltantesProveedor = async (proveedor: string) => {
+    try {
+      const faltantesProveedor = faltantesPorProveedor[proveedor] || []
+      const textoFaltantes = faltantesProveedor
+        .map((f) => `${f.cantidad}x${f.unidades} ${f.nombre}${f.precio ? ` $${f.precio}` : ""}`)
+        .join("\n")
+
+      await navigator.clipboard.writeText(textoFaltantes)
+      toast({
+        title: "📋 Copiado",
+        description: `Faltantes de ${proveedor} copiados al portapapeles`,
+      })
+    } catch (error) {
+      toast({
+        title: "❌ Error",
+        description: "No se pudieron copiar los faltantes",
+        variant: "destructive",
+      })
+    }
+  }
 
   const agregarFaltante = async () => {
     try {
@@ -246,6 +267,10 @@ export function ProductosFaltantes({ faltantes, proveedores, onVolver, onActuali
               {faltantesDelProveedor.length} productos faltantes de este proveedor
             </p>
           </div>
+          <Button variant="outline" onClick={() => copiarFaltantesProveedor(proveedorSeleccionado)} className="gap-2">
+            <Copy className="w-4 h-4" />
+            Copiar Faltantes
+          </Button>
         </div>
 
         <div className="space-y-4">
@@ -416,9 +441,9 @@ export function ProductosFaltantes({ faltantes, proveedores, onVolver, onActuali
             ) : (
               Object.entries(faltantesPorProveedor).map(([proveedor, faltantesProveedor]) => (
                 <Card key={proveedor} className="cursor-pointer hover:shadow-md transition-shadow">
-                  <CardHeader onClick={() => setProveedorSeleccionado(proveedor)}>
+                  <CardHeader>
                     <div className="flex justify-between items-center">
-                      <div>
+                      <div onClick={() => setProveedorSeleccionado(proveedor)} className="flex-1">
                         <CardTitle className="text-lg">{proveedor}</CardTitle>
                         <CardDescription>
                           {faltantesProveedor.length} productos faltantes •{" "}
@@ -426,6 +451,18 @@ export function ProductosFaltantes({ faltantes, proveedores, onVolver, onActuali
                         </CardDescription>
                       </div>
                       <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            copiarFaltantesProveedor(proveedor)
+                          }}
+                          className="gap-1"
+                        >
+                          <Copy className="w-3 h-3" />
+                          Copiar
+                        </Button>
                         <Badge variant="secondary" className="bg-red-100 text-red-800">
                           {faltantesProveedor.length} productos
                         </Badge>
